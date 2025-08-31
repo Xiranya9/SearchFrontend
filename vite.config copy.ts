@@ -6,23 +6,17 @@ export default defineConfig({
   plugins: [vue()],
   base: "/search/",
   server: {
-    port: 3000,
     allowedHosts: [
       "hdnla.asia/search/",
       "alita.cpolar.top",
       "localhost",
       "127.0.0.1",
-      "http://localhost:3000",
+      "http://localhost:5173",
     ],
     proxy: {
       "/api": {
-        target: "http://localhost:9093", // 后端API地址
+        target: "http://localhost:9090", // 后端API地址
         changeOrigin: true, // 允许跨域
-        /**
-         * 重写路径，移除路径中的 `/api` 前缀。
-         * @param {string} path - 原始路径字符串。
-         * @returns {string} 移除 `/api` 前缀后的路径。
-         */
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },

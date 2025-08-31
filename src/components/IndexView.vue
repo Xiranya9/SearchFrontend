@@ -1,18 +1,21 @@
 <template>
   <div id="app">
-    <el-container
-      style="height: 100vhl; text-align: center; background-color: #7a80e6"
-    >
+    <el-container class="app-container">
+      <!-- 标题栏 -->
       <el-header>
         <h1>逍遥子 - 搜索引擎</h1>
       </el-header>
+
+      <!-- 主体 -->
       <el-main>
+        <!-- 搜索框 -->
         <el-input
           v-model="searchKeyword"
           placeholder="请输入搜索关键词"
-          @keyup.enter.native="search"
-          style="width: 50%; margin-bottom: 20px"
+          @keyup.enter.native="handleSearch"
+          class="search-input"
         >
+          <!-- 搜索类型选择 -->
           <template #prepend>
             <el-select
               v-model="searchType"
@@ -22,142 +25,156 @@
               <el-option label="网页" value="web"></el-option>
             </el-select>
           </template>
+
+          <!-- 搜索按钮 -->
           <template #append>
-            <el-button @click="search" icon="el-icon-search"></el-button>
+            <el-button @click="handleSearch" icon="el-icon-search"></el-button>
           </template>
         </el-input>
-        <el-result
-          v-if="searchResults.length === 0 && hasSearched"
-          icon="Info"
-          title="没有找到相关结果"
-        ></el-result>
-        <div v-else>
+
+        <!-- 加载动画 -->
+        <div v-if="loading" class="loading-container">
+          <el-icon class="is-loading">
+            <Loading />
+          </el-icon>
+          <p>正在搜索，请稍候...</p>
+        </div>
+
+        <!-- 搜索结果 -->
+        <transition name="fade">
+          <el-result
+            v-if="!searchResults.length && hasSearched && !loading"
+            icon="Info"
+            title="没有找到相关结果"
+          />
+        </transition>
+
+        <transition-group name="fade" tag="div">
           <el-card
             v-for="(result, index) in searchResults"
             :key="index"
             class="search-result-card"
             shadow="hover"
           >
+            <!-- 结果标题 -->
             <template #header>
-              <div class="result-header">
-                <a :href="result.link" target="_blank" class="result-title">
-                  {{ result.title }}
-                </a>
-              </div>
+              <a :href="result.link" target="_blank" class="result-title">
+                {{ result.title }}
+              </a>
             </template>
+
+            <!-- 描述 -->
             <div
               class="result-description"
               v-html="formatDescription(result.description)"
-            ></div>
+            />
+
+            <!-- 链接 -->
             <div class="result-url">
-              <a :href="result.link" target="_blank" class="url-link">
-                {{ result.link }}
-              </a>
+              <a :href="result.link" target="_blank" class="url-link">{{
+                result.link
+              }}</a>
             </div>
+
+            <!-- 日期 -->
             <div class="result-date" v-if="result.date">
               <el-tag type="info" size="small">{{ result.date }}</el-tag>
             </div>
           </el-card>
-        </div>
+        </transition-group>
       </el-main>
     </el-container>
+    <FooterBar />
   </div>
 </template>
 
 <script>
 import axios from "axios";
+import { isValidUrl, findUrlInText } from "../utils/urlUtils";
+import { Loading } from "@element-plus/icons-vue";
+import FooterBar from "./FootBar.vue";
 
 export default {
+  components: { Loading, FooterBar },
   data() {
     return {
       searchKeyword: "",
       searchType: "web",
+
       searchResults: [],
       hasSearched: false,
+      loading: false, // 新增 loading 状态
     };
   },
   methods: {
-    search() {
+    /** 点击搜索按钮或回车 */
+    handleSearch() {
       if (!this.searchKeyword.trim()) {
         this.$message.warning("请输入搜索关键词");
         return;
       }
+
       this.hasSearched = true;
+      this.loading = true; // 开始加载
+
       axios
-        .post("http://39.105.141.108:9090/api/search", this.searchKeyword)
-        .then((response) => {
-          this.parseSearchResults(response.data);
-        })
-        .catch((error) => {
-          console.error("搜索失败:", error);
+        .post("http://localhost:9093/api/search", this.searchKeyword)
+        .then((res) => this.parseSearchResults(res.data))
+        .catch((err) => {
+          console.error("搜索失败:", err);
           this.$message.error("搜索失败，请稍后再试");
+        })
+        .finally(() => {
+          this.loading = false; // 请求结束
         });
     },
+
+    /** 解析后端返回的数据 */
     parseSearchResults(data) {
-      this.searchResults = data.map((item) => {
-        const lines = item.split("\n").filter((line) => line.trim() !== "");
-        let title = "";
-        let link = "";
-        let description = "";
-        let date = "";
-
-        // 智能解析不同格式的数据
-        if (lines.length >= 1) {
-          // 提取标题（支持"标题："前缀或直接标题）
-          if (lines[0].startsWith("标题：")) {
-            title = lines[0].substring(3);
-          } else {
-            title = lines[0];
-          }
-        }
-
-        // 提取链接（支持"链接："前缀、URL在描述后或手动匹配URL格式）
-        if (lines.length >= 2) {
-          const secondLine = lines[1].trim();
-          if (secondLine.startsWith("链接：")) {
-            link = secondLine.substring(3);
-          } else if (isValidUrl(secondLine)) {
-            link = secondLine;
-          } else {
-            // 若第二行不是链接，则在描述中查找链接
-            link = findUrlInDescription(lines.join("\n"));
-          }
-        } else {
-          // 若行数不足，在描述中查找链接
-          link = findUrlInDescription(lines.join("\n"));
-        }
-
-        // 提取描述和日期
-        let descLines = lines.slice(2);
-        if (lines.length >= 2 && !isValidUrl(lines[1].trim())) {
-          descLines = lines.slice(1);
-        }
-
-        if (descLines.length > 0) {
-          const firstDescLine = descLines[0].trim();
-          const dateMatch = firstDescLine.match(
-            /(\d{4}年\d{1,2}月\d{1,2}日) · /
-          );
-          if (dateMatch && dateMatch[1]) {
-            date = dateMatch[1];
-            description =
-              firstDescLine.replace(dateMatch[0], "").trim() +
-              (descLines.length > 1
-                ? "\n" + descLines.slice(1).join("\n")
-                : "");
-          } else {
-            description = descLines.join("\n").trim();
-          }
-        }
-
-        return {
-          title,
-          link,
-          description,
-          date,
-        };
-      });
+      this.searchResults = data.map(this.parseSingleResult);
     },
+
+    /** 解析单个结果 */
+    parseSingleResult(item) {
+      const lines = item.split("\n").filter((line) => line.trim() !== "");
+      let [title, link, description, date] = ["", "", "", ""];
+
+      // 标题
+      title = lines[0]?.replace(/^标题：/, "") || "";
+
+      // 链接
+      const secondLine = lines[1]?.trim();
+      if (secondLine?.startsWith("链接：")) {
+        link = secondLine.substring(3);
+      } else if (isValidUrl(secondLine)) {
+        link = secondLine;
+      } else {
+        link = findUrlInText(lines.join("\n"));
+      }
+
+      // 描述 + 日期
+      let descLines = lines.slice(2);
+      if (secondLine && !isValidUrl(secondLine)) {
+        descLines = lines.slice(1);
+      }
+
+      if (descLines.length) {
+        const firstDescLine = descLines[0];
+        const dateMatch = firstDescLine.match(/(\d{4}年\d{1,2}月\d{1,2}日) · /);
+        if (dateMatch) {
+          date = dateMatch[1];
+          description =
+            firstDescLine.replace(dateMatch[0], "").trim() +
+            (descLines.length > 1 ? "\n" + descLines.slice(1).join("\n") : "");
+        } else {
+          description = descLines.join("\n").trim();
+        }
+      }
+
+      return { title, link, description, date };
+    },
+
+    /** 格式化描述内容 */
     formatDescription(desc) {
       return desc
         .replace(/(\d+)\./g, "<span class='list-item'>$1.</span>")
@@ -165,33 +182,79 @@ export default {
     },
   },
 };
-
-// 工具函数：验证URL有效性
-function isValidUrl(url) {
-  const urlPattern =
-    /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/;
-  return urlPattern.test(url);
-}
-
-// 工具函数：从文本中提取URL
-function findUrlInDescription(text) {
-  const urlPattern = /https?:\/\/[^\s]+/g;
-  const match = text.match(urlPattern);
-  return match ? match[0] : "";
-}
 </script>
 
-<style>
-/* 保持原有样式不变，新增链接样式 */
+<style scoped>
+.app-container {
+  height: 100vh;
+  text-align: center;
+  background-color: #7a80e6;
+  padding-bottom: 50px;
+}
+
+.search-input {
+  width: 50%;
+  margin-bottom: 20px;
+}
+
+.loading-container {
+  margin-top: 40px;
+  font-size: 14px;
+  color: #555;
+}
+
+.loading-container .el-icon {
+  font-size: 28px;
+  color: #409eff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.result-title {
+  font-weight: bold;
+  font-size: 16px;
+  text-decoration: none;
+  color: #1a0dab;
+}
+
+.result-title:hover {
+  text-decoration: underline;
+}
+
+.result-description {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.result-url {
+  margin-top: 6px;
+}
+
 .url-link {
   color: #006621;
   font-size: 12px;
-  text-decoration: none;
   word-break: break-all;
+  text-decoration: none;
+}
 
-  &:hover {
-    text-decoration: underline;
-    color: #004d19;
-  }
+.url-link:hover {
+  text-decoration: underline;
+  color: #004d19;
+}
+
+/* 渐隐动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.4s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
