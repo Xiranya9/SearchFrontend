@@ -4,11 +4,11 @@ import vue from "@vitejs/plugin-vue";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  base: "/search/",
+  base: "/searchengine/",
   server: {
     port: 3000,
     allowedHosts: [
-      "hdnla.asia/search/",
+      "hdnla.asia/searchengine/",
       "alita.cpolar.top",
       "localhost",
       "127.0.0.1",
@@ -16,7 +16,7 @@ export default defineConfig({
     ],
     proxy: {
       "/api": {
-        target: "http://localhost:9093", // 后端API地址
+        target: "http://hdnla.asia:9093", // 后端API地址
         changeOrigin: true, // 允许跨域
         /**
          * 重写路径，移除路径中的 `/api` 前缀。

@@ -118,7 +118,7 @@ export default {
       this.loading = true; // 开始加载
 
       axios
-        .post("http://localhost:9093/api/search", this.searchKeyword)
+        .post("http://hdnla.asia:9093/api/search", this.searchKeyword)
         .then((res) => this.parseSearchResults(res.data))
         .catch((err) => {
           console.error("搜索失败:", err);
